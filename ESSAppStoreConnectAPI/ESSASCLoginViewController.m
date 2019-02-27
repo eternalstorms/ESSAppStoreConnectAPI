@@ -496,11 +496,11 @@
 												   
 												   if (codesLeft <= 0)
 												   {
-													   self.amountField.placeholderString = [NSString stringWithFormat:@"no promo codes left in version %@",version];
+													   self.amountField.placeholderString = [NSString stringWithFormat:@"no promo codes left for version %@",version];
 													   self.amountField.enabled = NO;
 												   } else
 												   {
-													   self.amountField.placeholderString = [NSString stringWithFormat:@"%ld promo codes left in version %@",codesLeft,version];
+													   self.amountField.placeholderString = [NSString stringWithFormat:@"%ld promo codes left for version %@",codesLeft,version];
 													   self.amountField.enabled = YES;
 												   }
 												   self.createButton.enabled = NO; //gets enabled by typing numbers
