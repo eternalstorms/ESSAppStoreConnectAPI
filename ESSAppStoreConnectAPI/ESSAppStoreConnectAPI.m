@@ -155,7 +155,7 @@ static ESSAppStoreConnectAPI *_shAPI = nil;
 	}
 	
 	//first, retrieve authServiceKey / Apple Widget Key
-	NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:@"https://olympus.itunes.apple.com/v1/app/config?hostname=itunesconnect.apple.com"]];
+	NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:@"https://appstoreconnect.apple.com/olympus/v1/app/config?hostname=itunesconnect.apple.com"]];
 	NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithRequest:req
 																 completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
 																	 dispatch_async(dispatch_get_main_queue(), ^{
@@ -799,7 +799,7 @@ static ESSAppStoreConnectAPI *_shAPI = nil;
 {
 	NSAssert(completionHandler != nil && self.authServiceKey.length != 0, @"completionHandler, identificationCookie and authServiceKey may not be nil");
 	
-	NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:@"https://olympus.itunes.apple.com/v1/session"]];
+	NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:@"https://appstoreconnect.apple.com/olympus/v1/session"]];
 	req.HTTPShouldHandleCookies = YES;
 	[self _updateHeadersForRequest:req additionalFields:nil];
 	NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithRequest:req completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
