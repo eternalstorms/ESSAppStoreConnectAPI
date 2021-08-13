@@ -733,7 +733,8 @@ static ESSAppStoreConnectAPI *_shAPI = nil;
 	[req setValue:@"application/json, text/javascript" forHTTPHeaderField:@"Accept"];
 	[req setValue:@"keep-alive" forHTTPHeaderField:@"Connection"];
 	[req setValue:@"PromoCodes for Mac and iOS by Eternal Storms Software" forHTTPHeaderField:@"User-Agent"];
-	
+	[req setValue:@"itc" forHTTPHeaderField:@"X-Csrf-Itc"];
+
 	if (additionalFields.allKeys.count != 0)
 	{
 		for (NSString *key in additionalFields.allKeys)
