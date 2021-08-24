@@ -28,6 +28,12 @@
  */
 @property (copy) NSNumber *currentTeamID;
 
+/*!
+ @property		currentPublicProviderID
+ @abstract		Identifies the currently selected team with a public ID. Needed in @c -_appsForCurrentTeamWithCompletionHandler:
+ */
+@property (copy) NSNumber *currentPublicProviderID;
+
 
 /*!
  @property		tfaAppleIDSessionID
@@ -155,7 +161,7 @@ static ESSAppStoreConnectAPI *_shAPI = nil;
 	}
 	
 	//first, retrieve authServiceKey / Apple Widget Key
-	NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:@"https://olympus.itunes.apple.com/v1/app/config?hostname=itunesconnect.apple.com"]];
+	NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:@"https://appstoreconnect.apple.com/olympus/v1/app/config?hostname=itunesconnect.apple.com"]];
 	NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithRequest:req
 																 completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
 																	 dispatch_async(dispatch_get_main_queue(), ^{
@@ -545,11 +551,11 @@ static ESSAppStoreConnectAPI *_shAPI = nil;
 		return;
 	}
 	
-	if (self.cachedAppsKeyedByTeamID[[NSString stringWithFormat:@"%ld",providerID.unsignedIntegerValue]] != nil)
+	/*if (self.cachedAppsKeyedByTeamID[[NSString stringWithFormat:@"%ld",providerID.unsignedIntegerValue]] != nil)
 	{
 		completionHandler(self.cachedAppsKeyedByTeamID[[NSString stringWithFormat:@"%ld",providerID.unsignedIntegerValue]], nil);
 		return;
-	}
+	}*/
 	
 	if ([providerID isEqualToNumber:self.currentTeamID])
 	{
@@ -608,8 +614,16 @@ static ESSAppStoreConnectAPI *_shAPI = nil;
 																			 return;
 																		 }
 																		 
-																		 NSArray *versions = dict[@"data"][@"versions"];
-																		 if (versions.count == 0)
+																		 NSDictionary *dataDict = dict[@"data"];
+																		 if (![dataDict isKindOfClass:[NSDictionary class]])
+																		 {
+																			 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+																				 [self promoCodeInfoForAppWithID:appID completionHandler:completionHandler];
+																			 });
+																			 return;
+																		 }
+																		 NSArray *versions = dataDict[@"versions"];
+																		 if (![versions isKindOfClass:[NSArray class]] || versions.count == 0)
 																		 {
 																			 completionHandler(@{}, [NSError errorWithDomain:ESS_ERRORDOMAIN_APPSTORECONNECTAPI_PROMOCODES code:ESSASCAPIErrorCodeUnexpectedReply userInfo:nil]);
 																			 return;
@@ -730,6 +744,11 @@ static ESSAppStoreConnectAPI *_shAPI = nil;
 	if (self.authServiceKey != nil)
 		[req setValue:self.authServiceKey forHTTPHeaderField:@"X-Apple-Widget-Key"];
 	
+	[req setValue:@"itc" forHTTPHeaderField:@"X-Csrf-Itc"];
+	
+	if (additionalFields[@"JUSTPOSTFIELDS"] != nil)
+		return;
+	
 	[req setValue:@"application/json, text/javascript" forHTTPHeaderField:@"Accept"];
 	[req setValue:@"keep-alive" forHTTPHeaderField:@"Connection"];
 	[req setValue:@"PromoCodes for Mac and iOS by Eternal Storms Software" forHTTPHeaderField:@"User-Agent"];
@@ -757,14 +776,23 @@ static ESSAppStoreConnectAPI *_shAPI = nil;
 		NSMutableArray *teams = [NSMutableArray array];
 		for (NSDictionary *dict in sessionDict[@"availableProviders"])
 		{
-			NSDictionary *newTeam = @{@"name":dict[@"name"],
-									  @"providerID":dict[@"providerId"]
-									  };
-			[teams addObject:newTeam];
+			NSMutableDictionary *newTeam = [NSMutableDictionary dictionary];
+			if (dict[@"name"] != nil)
+				newTeam[@"name"] = dict[@"name"];
+			if (dict[@"providerId"] != nil)
+				newTeam[@"providerID"] = dict[@"providerId"];
+			if (dict[@"contentTypes"] != nil)
+				newTeam[@"contentTypes"] = dict[@"contentTypes"];
+			if (dict[@"publicProviderId"] != nil)
+				newTeam[@"publicProviderId"] = dict[@"publicProviderId"];
+			if (dict[@"subType"] != nil)
+				newTeam[@"subType"] = dict[@"subType"];
+			[teams addObject:newTeam.copy];
 		}
 		
 		self.personID = sessionDict[@"user"][@"prsId"];
 		self.currentTeamID = sessionDict[@"provider"][@"providerId"];
+		self.currentPublicProviderID = sessionDict[@"provider"][@"publicProviderId"];
 		
 		if (self.personID == nil || self.currentTeamID == nil)
 		{
@@ -799,7 +827,7 @@ static ESSAppStoreConnectAPI *_shAPI = nil;
 {
 	NSAssert(completionHandler != nil && self.authServiceKey.length != 0, @"completionHandler, identificationCookie and authServiceKey may not be nil");
 	
-	NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:@"https://olympus.itunes.apple.com/v1/session"]];
+	NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:@"https://appstoreconnect.apple.com/olympus/v1/session"]];
 	req.HTTPShouldHandleCookies = YES;
 	[self _updateHeadersForRequest:req additionalFields:nil];
 	NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithRequest:req completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
@@ -825,15 +853,39 @@ static ESSAppStoreConnectAPI *_shAPI = nil;
 
 - (void)_switchToTeamWithID:(NSNumber *)teamID completionHandler:(void(^)(BOOL switched, NSError *error))completionHandler
 {
-	NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"https://appstoreconnect.apple.com/WebObjects/iTunesConnect.woa/ra/v1/session/webSession"]];
+	NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"https://appstoreconnect.apple.com/olympus/v1/providerSwitchRequests"]];
 	NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:url];
 	req.HTTPShouldHandleCookies = YES;
 	req.HTTPMethod = @"POST";
-	[self _updateHeadersForRequest:req additionalFields:nil];
-	NSDictionary *jsonDict = @{@"contentProviderId":teamID,
-							   @"dsId":self.personID,
-							   @"ipAddress":[NSNull null]
-							   };
+	NSString *publicTeamID = nil;
+	for (NSDictionary *dic in self.cachedTeams)
+	{
+		if ([dic[@"providerID"] isEqualToNumber:teamID])
+		{
+			publicTeamID = dic[@"publicProviderId"];
+			break;
+		}
+	}
+	
+	if (publicTeamID == nil)
+	{
+		completionHandler(NO, nil);
+		return;
+	}
+	
+	[self _updateHeadersForRequest:req additionalFields:@{@"JUSTPOSTFIELDS":@""}];
+	NSDictionary *jsonDict = @{@"data":@{
+		@"type":@"providerSwitchRequests",
+		@"relationships":@{
+			@"provider":@{
+				@"data":@{
+					@"type":@"providers",
+					@"id":publicTeamID
+				}
+			}
+		}
+	}
+	};
 	NSError *jsonError = nil;
 	NSData *bodyData = [NSJSONSerialization dataWithJSONObject:jsonDict options:NSJSONWritingPrettyPrinted error:&jsonError];
 	if (bodyData == nil)
@@ -863,15 +915,15 @@ static ESSAppStoreConnectAPI *_shAPI = nil;
 																		 
 																		 if (webSessionData == nil ||
 																			 webSessionData.allKeys.count == 0 ||
-																			 webSessionData[@"contentProviderId"] == nil ||
-																			 webSessionData[@"dsId"] == nil ||
-																			 (webSessionData[@"statusCode"] != nil && ![webSessionData[@"statusCode"] isEqualToString:@"SUCCESS"]))
+																			 webSessionData[@"id"] == nil ||
+																			 webSessionData[@"type"] == nil)
 																		 {
 																			 completionHandler(NO, [NSError errorWithDomain:ESS_ERRORDOMAIN_APPSTORECONNECTAPI_APPS code:ESSASCAPIErrorCodeUnexpectedReply userInfo:nil]);
 																			 return;
 																		 }
 																		 
 																		 self.currentTeamID = teamID;
+																		 self.currentPublicProviderID = webSessionData[@"id"];
 																		 
 																		 completionHandler(YES, nil);
 																	 });
@@ -882,6 +934,12 @@ static ESSAppStoreConnectAPI *_shAPI = nil;
 - (void)_appsForCurrentTeamWithCompletionHandler:(void (^)(NSArray <NSDictionary *> *apps, NSError *error))completionHandler
 {
 	NSAssert(completionHandler != nil, @"completionHandler may not be nil");
+	
+	if (self.cachedAppsKeyedByTeamID[[NSString stringWithFormat:@"%ld",self.currentTeamID.unsignedIntegerValue]] != nil)
+	{
+		completionHandler(self.cachedAppsKeyedByTeamID[[NSString stringWithFormat:@"%ld",self.currentTeamID.unsignedIntegerValue]], nil);
+		return;
+	}
 	
 	//NSString *urlStr = @"https://appstoreconnect.apple.com/iris/v1/apps?limit=100";
 	NSString *urlStr = @"https://appstoreconnect.apple.com/WebObjects/iTunesConnect.woa/ra/apps/manageyourapps/summary/v2";
